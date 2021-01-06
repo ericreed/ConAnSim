@@ -1,0 +1,377 @@
+---
+title: "Network-Based Connectivity Data Simulation"
+author: "Eric Reed"
+date: "12/22/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+```
+
+# Requirements
+
+## R Packages and Python Modules
+
+```{r}
+
+## R packages to run simulation functions
+require(magrittr)
+library(igraph)
+library(reticulate)
+library(Matrix)
+library(BDgraph)
+library(ggplot2)
+require(corpcor)
+require(MASS)
+
+## R packages for visualization
+require(ggplot2)
+require(gridExtra)
+
+## Python modules
+nx <- import("networkx")
+```
+
+## Directories
+
+```{r}
+
+baseDir <- ".." # If running from the "./docs" directory
+rDir <- file.path(baseDir, "R")
+pyDir <- file.path(baseDir, "python")
+
+```
+
+
+## Read in functions
+
+```{r}
+
+## Read in R functions
+rDir %>%
+    list.files(., full.names = TRUE) %>%
+    lapply(., source) %>%
+    invisible # This keeps lapply from printing NULL
+
+## Read in python functions
+source_python(file.path(pyDir, "LFR_Communities.py"))
+
+```
+
+# Simulating scale-free networks and adjacency matrices
+
+## Simulating scale-free networks
+
+The `simNetComs()` function simulates a set of communities and builds a scale-free based on this community structure using python functions which can be found in **LFR_Comminities.py**.  **LFR_Comminities.py** includes functions from the *networkx* python library for creating scale-free networks according to specified paramaters. For more information about paramerization go [here](https://networkx.org/documentation/stable/reference/generated/networkx.generators.community.LFR_benchmark_graph.html).
+
+`simNetComs()` returns a named list of two elements:
+
+1. `ig`: an *igraph* object containing the network.
+2. `coms`: a factor vector containing the community assignment for each node.
+
+
+```{r}
+
+netComs <- simNetComs(seed=12345, 
+                      n=200, 
+                      tau1=3, 
+                      tau2=2, 
+                      mu=0.07, 
+                      average_degree=5, 
+                      min_community=25, 
+                      max_community=50)
+
+## Plot graph
+plot(netComs$ig)
+
+## Print table of community sizes
+print(table(netComs$coms))
+
+```
+
+## Simulating adjacency matrices
+
+The `simAdjMat()` function performs two main tasks:
+
+1. Simulates a correlation matrix from the *igraph* element of the output of `simNetComs()`.
+    - Uses functionality adapted from `BDgraph::bdgraph.sim()`.
+2. Calculates community and background connectivities from this correlation matrix.
+
+**Important: The simulation of the correlation matrix is a stochastic process. The simulated correlation matricies will be completely different if repeated if no or different seeds are specified, even though the input networks are the same.**
+
+`simAdjMat()` returns a named list of 5 elements:
+
+1. adjMat: Simulated correlation matrix.
+2. conns: Named numeric vector of community connectivies.
+3. bg: Background connectivity.
+4. coms: Factor vector containing the community assignment for each node (Same as netComs$coms).
+5. adjNet: Sparse matrix of converted from original graph input, i.e. 0's and 1's.
+
+```{r}
+
+set.seed(123)
+netConn <- simAdjMat(netComs)
+
+## Print dimension of correlation matrix
+print(dim(netConn$adjMat))
+
+## Print community connectivities
+print(netConn$conns)
+
+## Print background connectivities
+print(netConn$bg)
+
+## Print table of community sizes (Same as netComs)
+print(table(netConn$coms))
+
+## Print dimension of sparse network adjacencies
+dim(netConn$adjNet)
+
+```
+
+### Visualize simulated adjacencies
+
+The `simAdj2df()` creates a data frame from the output of `simAdjMat()` containing the upper triangle of relavant adjacencies for visualization. This data from contains 3 columns
+
+- cors = Upper triangle of correlation matrix.
+- edges = Upper triangle of adjacency matrix of original graph.
+- coms = Upper triangle of matrix defining community connections ("0" if not in the same community).
+
+```{r}
+
+adjDF <- simAdj2df(netConn)
+
+## Print first 6 rows
+head(adjDF)
+
+## Visualize results
+
+### Correlation and edge adjacency
+ceDens <- ggplot(data = adjDF, aes(x = cors, group = edges, fill = as.factor(edges))) +
+    geom_density(alpha = 0.6) +
+    scale_fill_discrete(name = "Network Adj.") +
+    scale_x_continuous(name = "Correlation") +
+    theme_bw()
+
+### Correlation and community adjacency
+ccDens <- ggplot(data = adjDF, aes(x = cors, group = coms, fill = coms)) +
+    geom_density(alpha = 0.6) +
+    scale_fill_discrete(name = "Community Adj.") +
+    scale_x_continuous(name = "Correlation") +
+    theme_bw()
+
+grid.arrange(ceDens, ccDens, ncol = 1)
+
+```
+
+### Run `simAdjMat()` again and compare to original
+
+```{r}
+
+set.seed(124) # Different seed
+netConnNew <- simAdjMat(netComs)
+
+## Community connectivities are different are different
+
+### Original
+print(netConn$conns)
+
+### New
+print(netConnNew$conns)
+
+## Plot correlations between runs
+
+# Add new correlations to adjDF
+adjDF$rep <- simAdj2df(netConnNew)$cors
+
+# Compare and plot edge adjacency
+ggplot(data = adjDF, aes(x = cors, y = rep, color = as.factor(edges))) +
+    geom_point(alpha = 0.6) +
+    scale_x_continuous("Cors. (Original)") +
+    scale_y_continuous("Cors. (New)") +
+    scale_color_manual(name = "Network Adj.", values = c("1" = "black", "0" = "grey60")) +
+    theme_bw()
+
+```
+
+# Simulating data from correlation matrices
+
+The `BDgraph::bdgraph.sim()` function generates data using the same `mvrnorm()` function from the **MASS** package. Accordingly, the `simAdj2data()` is wrapper for `mvrnorm()`, which uses the output of `simAdjMat()` to generate an *n by p* matrix of multivariate normal data.
+
+```{r}
+
+simDat <- simAdj2data(netConn, 50)
+
+## Compare estimated correlations to known correlations
+simCors <- cor(simDat)
+adjDF$sims <- simCors[upper.tri(simCors)]
+
+# Compare and plot adjacency
+ggplot(data = adjDF, aes(x = cors, y = sims, color = as.factor(edges))) +
+    geom_point(alpha = 0.6) +
+    scale_x_continuous("Cors. (Known)") +
+    scale_y_continuous("Cors. (Estimates)") +
+    scale_color_manual(name = "Network Adj.", values = c("1" = "black", "0" = "grey60")) +
+    theme_bw()
+
+```
+
+# Controlling the distribution of simulated correlations
+
+```{r}
+
+## Create D matrix
+Dmat <- matrix(0.50, ncol = length(netComs$coms), nrow = length(netComs$coms))
+diag(Dmat) <- 1
+
+## Use D matrix in correlation estimates
+set.seed(123)
+netConnD50 <- simAdjMat(netComs, D = Dmat)
+
+## Print community connectivities
+print(netConn$conns)
+
+## Visualize distribution
+adjDF50 <- simAdj2df(netConnD50)
+
+## Visualize results
+
+### Correlation and edge adjacency
+ceDens50 <- ggplot(data = adjDF50, aes(x = cors, group = edges, fill = as.factor(edges))) +
+    geom_density(alpha = 0.6) +
+    scale_fill_discrete(name = "Network Adj.") +
+    scale_x_continuous(name = "Correlation") +
+    theme_bw() +
+    ggtitle("D = 0.50")
+
+### Correlation and community adjacency
+ccDens50 <- ggplot(data = adjDF50, aes(x = cors, group = coms, fill = coms)) +
+    geom_density(alpha = 0.6) +
+    scale_fill_discrete(name = "Community Adj.") +
+    scale_x_continuous(name = "Correlation") +
+    theme_bw() +
+    ggtitle("D = 0.50")
+
+grid.arrange(ceDens50, ccDens50, ncol = 1)
+
+
+```
+
+# Simulating differential connectivity
+
+## Manually reducing connectivity of simulated correlation matrix
+
+Once we estimate the correlation matrix, we can reduce the connectivity by shrinking the magnitude of correlation values, while preserving positive definiteness, using **arctan** transformations of the correlation values. The **arctan** of correlation is normally distributed. 
+
+This is done in three steps:
+
+1. Transform correlation matrix with the `arctan()` function.
+2. Multiply by a *"shrinking factor"* between 0 and 1. 
+3. Transform values back into correlations using the `tan()` function.
+
+```{r}
+
+## Get correlation matrix
+corD50 <- netConnD50$adjMat
+
+## It's positive definite
+is.positive.definite(corD50)
+
+## Shrink by a factor of 0.50
+corD50red <- tanh(atanh(corD50) * 0.5)
+
+## It's also positive definite
+is.positive.definite(corD50red)
+
+## Connectivities of original correlation matrix
+netConnD50$conns
+
+## Connectivities of new correlation matrix
+sapply(levels(netConnD50$coms), getComConn, corD50red, netConnD50$coms)
+
+## Compare the distributions of connectivities
+
+### Add reduced correlations to adjDF50
+adjDF50$red <- corD50red[upper.tri(corD50red)]
+
+ggplot(data = adjDF50, aes(x = cors, y = red, color = as.factor(edges))) +
+    geom_abline(intercept = 0, slope = 1, color = "red") +
+    geom_point(alpha = 0.6) +
+    scale_x_continuous("Cors. (Original)") +
+    scale_y_continuous("Cors. (Shrunk:0.50)") +
+    scale_color_manual(name = "Network Adj.", values = c("1" = "black", "0" = "grey60")) +
+    theme_bw()
+
+```
+
+This transformation doesn't work in the other direction, at least in that it does not preserve positive definateness of the correlation matrix.
+
+```{r}
+
+## Increase by a factor of 1.1
+corD50inc <- tanh(atanh(corD50) * 1.1)
+
+## It's not positive definite
+is.positive.definite(corD50inc)
+
+```
+
+## Reducing connectivity to a specified value
+
+In the example above we used a *shrinking factor* of 0.5, which reduced the connectivity of community:1 from 0.52 to 0.23. Suppose we wanted to shrink the connectivity to only 0.50 to have a nice round number for simulation. Then, suppose we have want to simulate the power to detect differential connectivity in another group with connectivity of 0.40. We can do this, however there's no close form (I wasn't able to find a) solution for calculating what these shrinking factors should be. 
+
+The function `findShrinkFactor()` searches for the optimal shrinking value, using a target connectivity and the original adjacency matrix and returns the appropriate shrinking factor.
+
+Below we estimate the shrinking factor to reduce the connectivity of community:1 to 0.5. Since we are only interested in shrinking community:1, we will need to subset the correlation matrix.
+
+```{r}
+
+# Subset correlation matrix
+corD50_com1 <- corD50[netConnD50$coms == "1", netConnD50$coms == "1"]
+
+# Finding shrinking factor to reduce connectivity to 0.50
+sf <- findShrinkFactor(0.5, corD50_com1)
+
+# What is it?
+sf
+
+```
+
+Now if we shrink the entire correlation matrix by this factor, the connectivity of community:1 will be very close to 0.50.
+
+```{r}
+
+# Reduce correlations by shrinking factor
+corD50targ <- tanh(atanh(corD50) * sf)
+
+## Original connectivities
+netConnD50$conns
+
+## Connectivities of new correlation matrix
+sapply(levels(netConnD50$coms), getComConn, corD50targ, netConnD50$coms)
+
+```
+
+Alternatively, we can reduce only the nodes in community:1 and replace these values in the original correlation matrix. This will still preserve the positive definitness of the correlation matrix.
+
+```{r}
+
+## Reduce only correlations in community:1
+corD50_com1targ <- tanh(atanh(corD50_com1) * sf)
+
+## Replace is back into the original correlation matrix
+corD50_com1rep <- corD50
+corD50_com1rep[netConnD50$coms == "1", netConnD50$coms == "1"] <- corD50_com1targ
+
+## It's still positive definite
+is.positive.definite(corD50_com1rep)
+
+## Original connectivities
+netConnD50$conns
+
+## Connectivities of new correlation matrix
+sapply(levels(netConnD50$coms), getComConn, corD50_com1rep, netConnD50$coms)
+
+```
+
