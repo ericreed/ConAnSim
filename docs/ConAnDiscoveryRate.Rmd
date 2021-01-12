@@ -1,0 +1,246 @@
+---
+title: "Testing Discovery Rate"
+author: "Eric Reed"
+date: "1/12/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+```
+
+# Requirements
+
+## R Packages and Python Modules
+
+```{r}
+
+## R packages to run simulation functions
+require(magrittr)
+library(igraph)
+library(reticulate)
+library(Matrix)
+library(BDgraph)
+library(ggplot2)
+require(corpcor)
+require(MASS)
+require(Biobase)
+require(ConAn)
+
+## R packages for visualization
+require(ggplot2)
+require(gridExtra)
+
+## Python modules
+nx <- import("networkx")
+
+```
+
+## Directories
+
+```{r}
+
+baseDir <- ".." # If running from the "./docs" directory
+rDir <- file.path(baseDir, "R")
+pyDir <- file.path(baseDir, "python")
+
+```
+
+
+## Read in functions
+
+```{r}
+
+## Read in R functions
+rDir %>%
+    list.files(., full.names = TRUE) %>%
+    lapply(., source) %>%
+    invisible # This keeps lapply from printing NULL
+
+## Read in python functions
+source_python(file.path(pyDir, "LFR_Communities.py"))
+
+```
+
+# Discovery rate for a single set of parameters
+
+## Single set of parameters
+
+```{r}
+
+# Seed
+seed <- 123
+
+# Network
+nFeats <- 500
+minComSize <- 25
+maxComSize <- 200
+aveDeg <- 5
+
+# Correlation matrix
+Dval <- 0.75
+
+# Number of samples per group
+n0 <- 50
+n1 <- 50
+
+# Number of iterations and cores for running ConAn
+nIter = 200
+nCores = 2
+
+```
+
+## Simulate network and correlation matrix
+
+```{r}
+
+# Simulate network
+netComs <- simNetComs(seed=seed, 
+                      n=nFeats, 
+                      tau1=3, 
+                      tau2=2, 
+                      mu=0.07, 
+                      average_degree=aveDeg, 
+                      min_community=minComSize, 
+                      max_community=maxComSize)
+
+## Create D matrix
+Dmat <- matrix(Dval, ncol = length(netComs$coms), nrow = length(netComs$coms))
+diag(Dmat) <- 1
+
+## Use D matrix in correlation estimates
+set.seed(seed)
+netConn <- simAdjMat(netComs, D = Dmat)
+
+## Print community and background connectivity
+print(netConn$conns)
+print(netConn$bg)
+
+```
+
+## Simulate data set of groups from same correlation matrix
+
+```{r}
+
+## Two of the same correlation matrices
+cor0 <- cor1 <- netConn$adjMat
+
+## Simulate expression set
+eSet <- eSetSim(n0, n1, cor0, cor1)
+
+## Print IDs in data set
+
+### Sample IDs
+print(head(colnames(eSet)))
+
+### Feat IDs
+print(head(colnames(eSet)))
+
+### Group IDs
+print(table(eSet$group))
+
+## Create module list
+modList <- lapply(levels(netConn$coms), function(x) rownames(eSet)[netConn$coms == x])
+names(modList) <- levels(netConn$coms)
+
+```
+
+## Calculate p-values for each module and ConAn run
+
+```{r}
+
+Pres <- conanWrapperPval(eSet, modList, nIter, nCores, seed)
+
+## Print top of data frame
+print(head(Pres))
+
+## Print p-values for module 1
+print(Pres[Pres$mod == "1",])
+
+```
+
+## Change background connectivity in one group and recalculate p-values
+
+```{r}
+
+## Set modular connectivity in the correlation matrix from group 1 to NA
+cor1comRem <- cor1
+for(i in levels(netConn$coms)) cor1comRem[netConn$coms == i, netConn$coms == i] <- NA
+
+## Get shrink factor to reduce background connectivity to a value of 0.3
+shrVal <- findShrinkFactor(0.3, cor1comRem)
+
+## Shrink correlaton matrix for group 1
+cor1_bgRed <- tanh(atanh(cor1) * shrVal)
+
+## Print new connectivity values
+
+### Community
+sapply(levels(netConn$coms), getComConn, cor1_bgRed, netConn$coms)
+
+### Community
+getComConn("bg", cor1_bgRed, netConn$coms)
+
+## Simulate data using this new matrix
+eSetBG <- eSetSim(n0, n1, cor0, cor1_bgRed)
+
+## Calculate p-values
+PresBG <- conanWrapperPval(eSetBG, modList, nIter, nCores, seed)
+
+## Print top of data frame
+print(head(PresBG))
+
+## Print p-values for module 1
+print(PresBG[PresBG$mod == "1",])
+
+```
+
+## Change connectivity of each module in one group and recalculate p-values
+
+```{r}
+
+## Get targets for each module
+targets <- netConn$conns - 0.1
+
+## Get shrinking factors for each module
+shrVec <- sapply(levels(netConn$coms), function(x) {
+    cor1Modx <- cor1[netConn$coms == x, netConn$coms == x]
+    findShrinkFactor(targets[x], cor1Modx)
+})
+
+## Shrink each module
+cor1_modRed <- cor1
+for(i in levels(netConn$coms)) {
+    
+    cor1_modRed[netConn$coms == i, netConn$coms == i] <- tanh(atanh(cor1[netConn$coms == i, netConn$coms == i]) * shrVec[i])
+    
+    # This doesn't always work.
+    if(!is.positive.definite(cor1_modRed)) {
+      cor1_modRed[netConn$coms == i, netConn$coms == i] <- cor1[netConn$coms == i, netConn$coms == i]
+    }
+    
+}
+
+## Print new connectivity values
+
+### Community
+sapply(levels(netConn$coms), getComConn, cor1_modRed, netConn$coms)
+
+### Community
+getComConn("bg", cor1_modRed, netConn$coms)
+
+## Simulate data using this new matrix
+eSetDiffConn <- eSetSim(n0, n1, cor0, cor1_modRed)
+
+## Calculate p-values
+PresDiffConn <- conanWrapperPval(eSetDiffConn, modList, nIter, nCores, seed)
+
+## Print top of data frame
+print(head(PresDiffConn))
+
+## Print p-values for module 1
+print(PresDiffConn[PresDiffConn$mod == "1",])
+
+
+```
+
