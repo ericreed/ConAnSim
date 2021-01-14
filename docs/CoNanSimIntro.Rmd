@@ -263,7 +263,7 @@ grid.arrange(ceDens50, ccDens50, ncol = 1)
 
 ## Manually reducing connectivity of simulated correlation matrix
 
-Once we estimate the correlation matrix, we can reduce the connectivity by shrinking the magnitude of correlation values, while preserving positive definiteness, using **arctan** transformations of the correlation values. The **arctan** of correlation is normally distributed. 
+Once we estimate the correlation matrix, we can reduce the connectivity by shrinking the magnitude of correlation values, while preserving positive definiteness, using **arctan** transformations of the correlation values. The **arctan** of correlation is normally distributed. This is known as the "Fisher Transformation".
 
 This is done in three steps:
 
@@ -289,7 +289,7 @@ is.positive.definite(corD50red)
 netConnD50$conns
 
 ## Connectivities of new correlation matrix
-sapply(levels(netConnD50$coms), getComConn, corD50red, netConnD50$coms)
+getComConn(levels(netConnD50$coms), corD50red, netConnD50$coms)
 
 ## Compare the distributions of connectivities
 
@@ -339,18 +339,19 @@ sf
 
 ```
 
-Now if we shrink the entire correlation matrix by this factor, the connectivity of community:1 will be very close to 0.50.
+Now if we shrink the entire correlation matrix by this factor, the connectivity of community:1 will be very close to 0.50. Will will use the `shrinkCor()` function to shrinking correlation matrices, which is just a wrapper for the shrinking transformation.
 
 ```{r}
 
 # Reduce correlations by shrinking factor
-corD50targ <- tanh(atanh(corD50) * sf)
+corD50targ <- shrinkCor(corD50, sf)
 
 ## Original connectivities
 netConnD50$conns
 
 ## Connectivities of new correlation matrix
-sapply(levels(netConnD50$coms), getComConn, corD50targ, netConnD50$coms)
+getComConn(levels(netConnD50$coms), corD50targ, netConnD50$coms)
+
 
 ```
 
@@ -359,7 +360,7 @@ Alternatively, we can reduce only the nodes in community:1 and replace these val
 ```{r}
 
 ## Reduce only correlations in community:1
-corD50_com1targ <- tanh(atanh(corD50_com1) * sf)
+corD50_com1targ <- shrinkCor(corD50_com1, sf)
 
 ## Replace is back into the original correlation matrix
 corD50_com1rep <- corD50
@@ -372,7 +373,7 @@ is.positive.definite(corD50_com1rep)
 netConnD50$conns
 
 ## Connectivities of new correlation matrix
-sapply(levels(netConnD50$coms), getComConn, corD50_com1rep, netConnD50$coms)
+getComConn(levels(netConnD50$coms), corD50_com1rep, netConnD50$coms)
 
 ```
 

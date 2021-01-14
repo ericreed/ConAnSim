@@ -606,97 +606,138 @@ names(modList) &lt;- levels(netConn$coms)</code></pre>
 <h2>Calculate p-values for each module and ConAn run</h2>
 <pre class="r"><code>Pres &lt;- conanWrapperPval(eSet, modList, nIter, nCores, seed)
 
+## Add some relavant information
+Pres$conn1 &lt;- Pres$conn0 &lt;- netConn$conns
+Pres$bg1 &lt;- Pres$bg0 &lt;- netConn$bg
+
 ## Print top of data frame
 print(head(Pres))</code></pre>
-<pre><code>##    sim_type mean_correct mdc_type mod      pval
-## 1 bootstrap        FALSE fraction   1 0.5210892
-## 2 bootstrap        FALSE fraction   2 0.8290983
-## 3 bootstrap        FALSE fraction   3 0.8914402
-## 4 bootstrap        FALSE fraction   4 0.8829080
-## 5 bootstrap        FALSE fraction   5 0.2453191
-## 6 bootstrap        FALSE fraction   6 0.4565866</code></pre>
+<pre><code>##    sim_type mean_correct mdc_type mod      pval     conn0     conn1       bg0
+## 1 bootstrap        FALSE fraction   1 0.5210892 0.5595910 0.5595910 0.3980526
+## 2 bootstrap        FALSE fraction   2 0.8290983 0.5643717 0.5643717 0.3980526
+## 3 bootstrap        FALSE fraction   3 0.8914402 0.5727073 0.5727073 0.3980526
+## 4 bootstrap        FALSE fraction   4 0.8829080 0.6443113 0.6443113 0.3980526
+## 5 bootstrap        FALSE fraction   5 0.2453191 0.5939538 0.5939538 0.3980526
+## 6 bootstrap        FALSE fraction   6 0.4565866 0.6675698 0.6675698 0.3980526
+##         bg1
+## 1 0.3980526
+## 2 0.3980526
+## 3 0.3980526
+## 4 0.3980526
+## 5 0.3980526
+## 6 0.3980526</code></pre>
 <pre class="r"><code>## Print p-values for module 1
 print(Pres[Pres$mod == &quot;1&quot;,])</code></pre>
-<pre><code>##       sim_type mean_correct   mdc_type mod      pval
-## 1    bootstrap        FALSE   fraction   1 0.5210892
-## 12 permutation        FALSE   fraction   1 0.5472637
-## 23   bootstrap         TRUE   fraction   1 0.4698746
-## 34 permutation         TRUE   fraction   1 0.4975124
-## 45   bootstrap        FALSE difference   1 0.5180326
-## 56 permutation        FALSE difference   1 0.5472637
-## 67   bootstrap         TRUE difference   1 0.5389667
-## 78 permutation         TRUE difference   1 0.4975124</code></pre>
+<pre><code>##       sim_type mean_correct   mdc_type mod      pval    conn0    conn1
+## 1    bootstrap        FALSE   fraction   1 0.5210892 0.559591 0.559591
+## 12 permutation        FALSE   fraction   1 0.5472637 0.559591 0.559591
+## 23   bootstrap         TRUE   fraction   1 0.4698746 0.559591 0.559591
+## 34 permutation         TRUE   fraction   1 0.4975124 0.559591 0.559591
+## 45   bootstrap        FALSE difference   1 0.5180326 0.559591 0.559591
+## 56 permutation        FALSE difference   1 0.5472637 0.559591 0.559591
+## 67   bootstrap         TRUE difference   1 0.5389667 0.559591 0.559591
+## 78 permutation         TRUE difference   1 0.4975124 0.559591 0.559591
+##          bg0       bg1
+## 1  0.3980526 0.3980526
+## 12 0.3980526 0.3980526
+## 23 0.3980526 0.3980526
+## 34 0.3980526 0.3980526
+## 45 0.3980526 0.3980526
+## 56 0.3980526 0.3980526
+## 67 0.3980526 0.3980526
+## 78 0.3980526 0.3980526</code></pre>
 </div>
-<div id="change-background-connectivity-in-one-group-and-recalculate-p-values" class="section level2">
-<h2>Change background connectivity in one group and recalculate p-values</h2>
-<pre class="r"><code>## Set modular connectivity in the correlation matrix from group 1 to NA
-cor1comRem &lt;- cor1
-for(i in levels(netConn$coms)) cor1comRem[netConn$coms == i, netConn$coms == i] &lt;- NA
+<div id="change-background-connectivity-in-one-group" class="section level2">
+<h2>Change background connectivity in one group</h2>
+<pre class="r"><code>## Set modular connectivity in the correlation matrix for one group to NA
+corComRem &lt;- cor1 # or cor0
+for(i in levels(netConn$coms)) corComRem[netConn$coms == i, netConn$coms == i] &lt;- NA
 
 ## Get shrink factor to reduce background connectivity to a value of 0.3
-shrVal &lt;- findShrinkFactor(0.3, cor1comRem)
+shrVal &lt;- findShrinkFactor(0.3, corComRem)
 
-## Shrink correlaton matrix for group 1
-cor1_bgRed &lt;- tanh(atanh(cor1) * shrVal)
-
-## Print new connectivity values
+## Shrink correlaton matrix for one group
+cor_bgRed &lt;- shrinkCor(cor1, shrVal) # or com0
 
 ### Community
-sapply(levels(netConn$coms), getComConn, cor1_bgRed, netConn$coms)</code></pre>
+getComConn(levels(netConn$coms), cor_bgRed, netConn$coms)</code></pre>
 <pre><code>##         1         2         3         4         5         6         7         8 
 ## 0.4448526 0.4493681 0.4555265 0.5236497 0.4775003 0.5472081 0.3776640 0.5302752 
 ##         9        10        11 
 ## 0.4741213 0.5288382 0.4979636</code></pre>
-<pre class="r"><code>### Community
-getComConn(&quot;bg&quot;, cor1_bgRed, netConn$coms)</code></pre>
+<pre class="r"><code>### Background
+getComConn(&quot;bg&quot;, cor_bgRed, netConn$coms)</code></pre>
 <pre><code>## [1] 0.2999941</code></pre>
 <pre class="r"><code>## Simulate data using this new matrix
-eSetBG &lt;- eSetSim(n0, n1, cor0, cor1_bgRed)
+eSetBG &lt;- eSetSim(n0, n1, cor0, cor_bgRed)
 
 ## Calculate p-values
 PresBG &lt;- conanWrapperPval(eSetBG, modList, nIter, nCores, seed)
 
+## Print new connectivity values
+
+## Add some relavant information
+PresBG$conn1 &lt;- PresBG$conn0 &lt;- netConn$conns
+PresBG$bg0 &lt;- netConn$bg
+PresBG$bg1 &lt;- getComConn(&quot;bg&quot;, cor_bgRed, netConn$coms)
+
 ## Print top of data frame
 print(head(PresBG))</code></pre>
-<pre><code>##    sim_type mean_correct mdc_type mod       pval
-## 1 bootstrap        FALSE fraction   1 0.01650918
-## 2 bootstrap        FALSE fraction   2 0.22202001
-## 3 bootstrap        FALSE fraction   3 0.06867182
-## 4 bootstrap        FALSE fraction   4 0.08434354
-## 5 bootstrap        FALSE fraction   5 0.02605297
-## 6 bootstrap        FALSE fraction   6 0.02218774</code></pre>
+<pre><code>##    sim_type mean_correct mdc_type mod       pval     conn0     conn1       bg0
+## 1 bootstrap        FALSE fraction   1 0.01650918 0.5595910 0.5595910 0.3980526
+## 2 bootstrap        FALSE fraction   2 0.22202001 0.5643717 0.5643717 0.3980526
+## 3 bootstrap        FALSE fraction   3 0.06867182 0.5727073 0.5727073 0.3980526
+## 4 bootstrap        FALSE fraction   4 0.08434354 0.6443113 0.6443113 0.3980526
+## 5 bootstrap        FALSE fraction   5 0.02605297 0.5939538 0.5939538 0.3980526
+## 6 bootstrap        FALSE fraction   6 0.02218774 0.6675698 0.6675698 0.3980526
+##         bg1
+## 1 0.2999941
+## 2 0.2999941
+## 3 0.2999941
+## 4 0.2999941
+## 5 0.2999941
+## 6 0.2999941</code></pre>
 <pre class="r"><code>## Print p-values for module 1
 print(PresBG[PresBG$mod == &quot;1&quot;,])</code></pre>
-<pre><code>##       sim_type mean_correct   mdc_type mod       pval
-## 1    bootstrap        FALSE   fraction   1 0.01650918
-## 12 permutation        FALSE   fraction   1 0.03980100
-## 23   bootstrap         TRUE   fraction   1 0.46545853
-## 34 permutation         TRUE   fraction   1 0.49751244
-## 45   bootstrap        FALSE difference   1 0.02332640
-## 56 permutation        FALSE difference   1 0.02985075
-## 67   bootstrap         TRUE difference   1 0.54702541
-## 78 permutation         TRUE difference   1 0.48756219</code></pre>
+<pre><code>##       sim_type mean_correct   mdc_type mod       pval    conn0    conn1
+## 1    bootstrap        FALSE   fraction   1 0.01650918 0.559591 0.559591
+## 12 permutation        FALSE   fraction   1 0.03980100 0.559591 0.559591
+## 23   bootstrap         TRUE   fraction   1 0.46545853 0.559591 0.559591
+## 34 permutation         TRUE   fraction   1 0.49751244 0.559591 0.559591
+## 45   bootstrap        FALSE difference   1 0.02332640 0.559591 0.559591
+## 56 permutation        FALSE difference   1 0.02985075 0.559591 0.559591
+## 67   bootstrap         TRUE difference   1 0.54702541 0.559591 0.559591
+## 78 permutation         TRUE difference   1 0.48756219 0.559591 0.559591
+##          bg0       bg1
+## 1  0.3980526 0.2999941
+## 12 0.3980526 0.2999941
+## 23 0.3980526 0.2999941
+## 34 0.3980526 0.2999941
+## 45 0.3980526 0.2999941
+## 56 0.3980526 0.2999941
+## 67 0.3980526 0.2999941
+## 78 0.3980526 0.2999941</code></pre>
 </div>
-<div id="change-connectivity-of-each-module-in-one-group-and-recalculate-p-values" class="section level2">
-<h2>Change connectivity of each module in one group and recalculate p-values</h2>
+<div id="change-connectivity-of-each-module-in-one-group" class="section level2">
+<h2>Change connectivity of each module in one group</h2>
 <pre class="r"><code>## Get targets for each module
 targets &lt;- netConn$conns - 0.1
 
 ## Get shrinking factors for each module
 shrVec &lt;- sapply(levels(netConn$coms), function(x) {
-    cor1Modx &lt;- cor1[netConn$coms == x, netConn$coms == x]
-    findShrinkFactor(targets[x], cor1Modx)
+    corModx &lt;- cor1[netConn$coms == x, netConn$coms == x]
+    findShrinkFactor(targets[x], corModx)
 })
 
 ## Shrink each module
-cor1_modRed &lt;- cor1
+cor_modRed &lt;- cor1 # or com0
 for(i in levels(netConn$coms)) {
     
-    cor1_modRed[netConn$coms == i, netConn$coms == i] &lt;- tanh(atanh(cor1[netConn$coms == i, netConn$coms == i]) * shrVec[i])
+    cor_modRed[netConn$coms == i, netConn$coms == i] &lt;- shrinkCor(cor1[netConn$coms == i, netConn$coms == i], shrVec[i])
     
     # This doesn't always work.
-    if(!is.positive.definite(cor1_modRed)) {
-      cor1_modRed[netConn$coms == i, netConn$coms == i] &lt;- cor1[netConn$coms == i, netConn$coms == i]
+    if(!is.positive.definite(cor_modRed)) {
+      cor_modRed[netConn$coms == i, netConn$coms == i] &lt;- cor1[netConn$coms == i, netConn$coms == i]
     }
     
 }
@@ -704,40 +745,242 @@ for(i in levels(netConn$coms)) {
 ## Print new connectivity values
 
 ### Community
-sapply(levels(netConn$coms), getComConn, cor1_modRed, netConn$coms)</code></pre>
+getComConn(levels(netConn$coms), cor_modRed, netConn$coms)</code></pre>
 <pre><code>##         1         2         3         4         5         6         7         8 
 ## 0.4595937 0.4643785 0.4727040 0.6443113 0.4939605 0.5675672 0.3863779 0.5495652 
 ##         9        10        11 
 ## 0.4942966 0.6503405 0.6186209</code></pre>
 <pre class="r"><code>### Community
-getComConn(&quot;bg&quot;, cor1_modRed, netConn$coms)</code></pre>
+getComConn(&quot;bg&quot;, cor_modRed, netConn$coms)</code></pre>
 <pre><code>## [1] 0.3980526</code></pre>
 <pre class="r"><code>## Simulate data using this new matrix
-eSetDiffConn &lt;- eSetSim(n0, n1, cor0, cor1_modRed)
+eSetDiffConn &lt;- eSetSim(n0, n1, cor0, cor_modRed)
 
 ## Calculate p-values
 PresDiffConn &lt;- conanWrapperPval(eSetDiffConn, modList, nIter, nCores, seed)
 
+## Add some relavant information
+PresDiffConn$conn0 &lt;- netConn$conns
+PresDiffConn$conn1 &lt;- getComConn(levels(netConn$coms), cor_modRed, netConn$coms)
+PresDiffConn$bg1 &lt;- PresDiffConn$bg0 &lt;- netConn$bg
+
+## Remove instances where the connectivity could not be reduced
+PresDiffConn &lt;- PresDiffConn[PresDiffConn$conn0 != PresDiffConn$conn1,]
+
 ## Print top of data frame
 print(head(PresDiffConn))</code></pre>
-<pre><code>##    sim_type mean_correct mdc_type mod        pval
-## 1 bootstrap        FALSE fraction   1 0.027055704
-## 2 bootstrap        FALSE fraction   2 0.328414203
-## 3 bootstrap        FALSE fraction   3 0.072822678
-## 4 bootstrap        FALSE fraction   4 0.855630272
-## 5 bootstrap        FALSE fraction   5 0.981050955
-## 6 bootstrap        FALSE fraction   6 0.003098253</code></pre>
+<pre><code>##    sim_type mean_correct mdc_type mod         pval     conn0     conn1
+## 1 bootstrap        FALSE fraction   1 2.705570e-02 0.5595910 0.4595937
+## 2 bootstrap        FALSE fraction   2 3.284142e-01 0.5643717 0.4643785
+## 3 bootstrap        FALSE fraction   3 7.282268e-02 0.5727073 0.4727040
+## 5 bootstrap        FALSE fraction   5 9.810510e-01 0.5939538 0.4939605
+## 6 bootstrap        FALSE fraction   6 3.098253e-03 0.6675698 0.5675672
+## 7 bootstrap        FALSE fraction   7 1.555527e-05 0.4863742 0.3863779
+##         bg0       bg1
+## 1 0.3980526 0.3980526
+## 2 0.3980526 0.3980526
+## 3 0.3980526 0.3980526
+## 5 0.3980526 0.3980526
+## 6 0.3980526 0.3980526
+## 7 0.3980526 0.3980526</code></pre>
 <pre class="r"><code>## Print p-values for module 1
 print(PresDiffConn[PresDiffConn$mod == &quot;1&quot;,])</code></pre>
-<pre><code>##       sim_type mean_correct   mdc_type mod       pval
-## 1    bootstrap        FALSE   fraction   1 0.02705570
-## 12 permutation        FALSE   fraction   1 0.04975124
-## 23   bootstrap         TRUE   fraction   1 0.03335288
-## 34 permutation         TRUE   fraction   1 0.08955224
-## 45   bootstrap        FALSE difference   1 0.03628653
-## 56 permutation        FALSE difference   1 0.04975124
-## 67   bootstrap         TRUE difference   1 0.18118092
-## 78 permutation         TRUE difference   1 0.07960199</code></pre>
+<pre><code>##       sim_type mean_correct   mdc_type mod       pval    conn0     conn1
+## 1    bootstrap        FALSE   fraction   1 0.02705570 0.559591 0.4595937
+## 12 permutation        FALSE   fraction   1 0.04975124 0.559591 0.4595937
+## 23   bootstrap         TRUE   fraction   1 0.03335288 0.559591 0.4595937
+## 34 permutation         TRUE   fraction   1 0.08955224 0.559591 0.4595937
+## 45   bootstrap        FALSE difference   1 0.03628653 0.559591 0.4595937
+## 56 permutation        FALSE difference   1 0.04975124 0.559591 0.4595937
+## 67   bootstrap         TRUE difference   1 0.18118092 0.559591 0.4595937
+## 78 permutation         TRUE difference   1 0.07960199 0.559591 0.4595937
+##          bg0       bg1
+## 1  0.3980526 0.3980526
+## 12 0.3980526 0.3980526
+## 23 0.3980526 0.3980526
+## 34 0.3980526 0.3980526
+## 45 0.3980526 0.3980526
+## 56 0.3980526 0.3980526
+## 67 0.3980526 0.3980526
+## 78 0.3980526 0.3980526</code></pre>
+</div>
+<div id="combining-differential-connectivity-and-background-connectivity" class="section level2">
+<h2>Combining differential connectivity and background connectivity</h2>
+<div id="situation-1-smaller-background-connectivity-in-group-with-greater-modular-connectivity" class="section level3">
+<h3>Situation 1: Smaller background connectivity in group with greater modular connectivity</h3>
+<p>We already have everything we need:</p>
+<ol style="list-style-type: decimal">
+<li>A correlation matrix with reduced background connectivity, <em>cor_bgRed</em>.</li>
+<li>A correlation matrix with reduced modular connectivity, <em>cor_modRed</em>.</li>
+</ol>
+<pre class="r"><code>## Simulate data using this new matrix
+eSetBG0_MR1 &lt;- eSetSim(n0, n1, cor_bgRed, cor_modRed)
+
+## Calculate p-values
+PresBG0_MR1 &lt;- conanWrapperPval(eSetBG0_MR1, modList, nIter, nCores, seed)
+
+## Add some relavant information
+PresBG0_MR1$conn0 &lt;- netConn$conns
+PresBG0_MR1$conn1 &lt;- getComConn(levels(netConn$coms), cor_modRed, netConn$coms)
+PresBG0_MR1$bg0 &lt;- getComConn(&quot;bg&quot;, cor_bgRed, netConn$coms)
+PresBG0_MR1$bg1 &lt;- netConn$bg
+
+## Remove instances where the connectivity could not be reduced
+PresBG0_MR1 &lt;- PresBG0_MR1[PresBG0_MR1$conn0 != PresBG0_MR1$conn1,]
+
+## Print top of data frame
+print(head(PresBG0_MR1))</code></pre>
+<pre><code>##    sim_type mean_correct mdc_type mod       pval     conn0     conn1       bg0
+## 1 bootstrap        FALSE fraction   1 0.43744330 0.5595910 0.4595937 0.2999941
+## 2 bootstrap        FALSE fraction   2 0.40714828 0.5643717 0.4643785 0.2999941
+## 3 bootstrap        FALSE fraction   3 0.87497633 0.5727073 0.4727040 0.2999941
+## 5 bootstrap        FALSE fraction   5 0.06942822 0.5939538 0.4939605 0.2999941
+## 6 bootstrap        FALSE fraction   6 0.09772324 0.6675698 0.5675672 0.2999941
+## 7 bootstrap        FALSE fraction   7 0.11614679 0.4863742 0.3863779 0.2999941
+##         bg1
+## 1 0.3980526
+## 2 0.3980526
+## 3 0.3980526
+## 5 0.3980526
+## 6 0.3980526
+## 7 0.3980526</code></pre>
+<pre class="r"><code>## Print p-values for module 1
+print(PresBG0_MR1[PresBG0_MR1$mod == &quot;1&quot;,])</code></pre>
+<pre><code>##       sim_type mean_correct   mdc_type mod       pval    conn0     conn1
+## 1    bootstrap        FALSE   fraction   1 0.43744330 0.559591 0.4595937
+## 12 permutation        FALSE   fraction   1 0.35820896 0.559591 0.4595937
+## 23   bootstrap         TRUE   fraction   1 0.02490659 0.559591 0.4595937
+## 34 permutation         TRUE   fraction   1 0.08955224 0.559591 0.4595937
+## 45   bootstrap        FALSE difference   1 0.43393565 0.559591 0.4595937
+## 56 permutation        FALSE difference   1 0.35820896 0.559591 0.4595937
+## 67   bootstrap         TRUE difference   1 0.19409961 0.559591 0.4595937
+## 78 permutation         TRUE difference   1 0.09950249 0.559591 0.4595937
+##          bg0       bg1
+## 1  0.2999941 0.3980526
+## 12 0.2999941 0.3980526
+## 23 0.2999941 0.3980526
+## 34 0.2999941 0.3980526
+## 45 0.2999941 0.3980526
+## 56 0.2999941 0.3980526
+## 67 0.2999941 0.3980526
+## 78 0.2999941 0.3980526</code></pre>
+</div>
+<div id="situation-2-smaller-background-connectivity-in-group-with-smaller-modular-connectivity" class="section level3">
+<h3>Situation 2: Smaller background connectivity in group with smaller modular connectivity</h3>
+<p>Here, we’ll just need to reduce background connectivity in the group with reduced modular connectivity.</p>
+<pre class="r"><code>## Shrink correlaton matrix for group
+cor_modRed_bgRed &lt;- shrinkCor(cor_modRed, shrVal)
+
+## Simulate data using this new matrix
+eSetBG1_MR1 &lt;- eSetSim(n0, n1, cor0, cor_modRed_bgRed)
+
+## Calculate p-values
+PresBG1_MR1 &lt;- conanWrapperPval(eSetBG1_MR1, modList, nIter, nCores, seed)
+
+## Add some relavant information
+PresBG1_MR1$conn0 &lt;- netConn$conns
+PresBG1_MR1$conn1 &lt;- getComConn(levels(netConn$coms), cor_modRed, netConn$coms)
+PresBG1_MR1$bg0 &lt;- netConn$bg
+PresBG1_MR1$bg1 &lt;- getComConn(&quot;bg&quot;, cor_modRed_bgRed, netConn$coms)
+
+## Remove instances where the connectivity could not be reduced
+PresBG1_MR1 &lt;- PresBG1_MR1[PresBG1_MR1$conn0 != PresBG1_MR1$conn1,]
+
+## Print top of data frame
+print(head(PresBG1_MR1))</code></pre>
+<pre><code>##    sim_type mean_correct mdc_type mod         pval     conn0     conn1
+## 1 bootstrap        FALSE fraction   1 3.415371e-05 0.5595910 0.4595937
+## 2 bootstrap        FALSE fraction   2 8.995103e-05 0.5643717 0.4643785
+## 3 bootstrap        FALSE fraction   3 1.465978e-05 0.5727073 0.4727040
+## 5 bootstrap        FALSE fraction   5 1.742972e-04 0.5939538 0.4939605
+## 6 bootstrap        FALSE fraction   6 5.254116e-05 0.6675698 0.5675672
+## 7 bootstrap        FALSE fraction   7 2.866549e-07 0.4863742 0.3863779
+##         bg0       bg1
+## 1 0.3980526 0.2999941
+## 2 0.3980526 0.2999941
+## 3 0.3980526 0.2999941
+## 5 0.3980526 0.2999941
+## 6 0.3980526 0.2999941
+## 7 0.3980526 0.2999941</code></pre>
+<pre class="r"><code>## Print p-values for module 1
+print(PresBG1_MR1[PresBG1_MR1$mod == &quot;1&quot;,])</code></pre>
+<pre><code>##       sim_type mean_correct   mdc_type mod         pval    conn0     conn1
+## 1    bootstrap        FALSE   fraction   1 3.415371e-05 0.559591 0.4595937
+## 12 permutation        FALSE   fraction   1 1.990050e-02 0.559591 0.4595937
+## 23   bootstrap         TRUE   fraction   1 1.769617e-04 0.559591 0.4595937
+## 34 permutation         TRUE   fraction   1 9.950249e-03 0.559591 0.4595937
+## 45   bootstrap        FALSE difference   1 1.708130e-04 0.559591 0.4595937
+## 56 permutation        FALSE difference   1 1.990050e-02 0.559591 0.4595937
+## 67   bootstrap         TRUE difference   1 5.305041e-02 0.559591 0.4595937
+## 78 permutation         TRUE difference   1 1.990050e-02 0.559591 0.4595937
+##          bg0       bg1
+## 1  0.3980526 0.2999941
+## 12 0.3980526 0.2999941
+## 23 0.3980526 0.2999941
+## 34 0.3980526 0.2999941
+## 45 0.3980526 0.2999941
+## 56 0.3980526 0.2999941
+## 67 0.3980526 0.2999941
+## 78 0.3980526 0.2999941</code></pre>
+</div>
+</div>
+</div>
+<div id="combine-results-into-a-single-data-frame" class="section level1">
+<h1>Combine results into a single data frame</h1>
+<pre class="r"><code>simRes &lt;- rbind(Pres, PresDiffConn, PresBG, PresBG0_MR1, PresBG1_MR1)
+
+## You can use the seed as simulation ID
+simRes$id &lt;- seed
+
+## Check size of output
+print(dim(simRes))</code></pre>
+<pre><code>## [1] 368  10</code></pre>
+<div id="which-simulation-parameters-did-we-test" class="section level2">
+<h2>Which simulation parameters did we test</h2>
+<pre class="r"><code>## Subset for one set of ConAn parameters
+simResBFF &lt;- simRes[simRes$sim_type == &quot;bootstrap&quot; &amp; 
+                      simRes$mean_correct == FALSE &amp;
+                      simRes$mdc_type == &quot;fraction&quot;,]
+
+## Add rounded module connectivity
+simResBFF$conn05 &lt;- round(netConn$conns[as.character(simResBFF$mod)]/0.05) * 0.05
+
+## Add rounded background connectivity
+simResBFF$bg05 &lt;- round(netConn$bg/0.05) * 0.05
+
+## Add rounded differential modular connectivity 
+simResBFF$diff05 &lt;- round((simResBFF$conn0 - simResBFF$conn1)/0.05) * 0.05
+
+## Add rounded differential background connectivity 
+simResBFF$diffbg05 &lt;- round((simResBFF$bg0 - simResBFF$bg1)/0.05) * 0.05
+
+## Get fequency table
+Ftab &lt;- as.data.frame(table(simResBFF$conn05, simResBFF$bg05, simResBFF$diff05, simResBFF$diffbg05))
+colnames(Ftab) &lt;- c(&quot;conn&quot;, &quot;bg&quot;, &quot;diff&quot;, &quot;diffbg&quot;, &quot;count&quot;)
+Ftab &lt;- Ftab[Ftab$count != 0,]
+
+print(Ftab)</code></pre>
+<pre><code>##    conn  bg diff diffbg count
+## 5   0.5 0.4  0.1   -0.1     1
+## 6  0.55 0.4  0.1   -0.1     3
+## 7   0.6 0.4  0.1   -0.1     2
+## 8  0.65 0.4  0.1   -0.1     2
+## 9   0.5 0.4    0      0     1
+## 10 0.55 0.4    0      0     3
+## 11  0.6 0.4    0      0     3
+## 12 0.65 0.4    0      0     4
+## 13  0.5 0.4  0.1      0     1
+## 14 0.55 0.4  0.1      0     3
+## 15  0.6 0.4  0.1      0     2
+## 16 0.65 0.4  0.1      0     2
+## 17  0.5 0.4    0    0.1     1
+## 18 0.55 0.4    0    0.1     3
+## 19  0.6 0.4    0    0.1     3
+## 20 0.65 0.4    0    0.1     4
+## 21  0.5 0.4  0.1    0.1     1
+## 22 0.55 0.4  0.1    0.1     3
+## 23  0.6 0.4  0.1    0.1     2
+## 24 0.65 0.4  0.1    0.1     2</code></pre>
 </div>
 </div>
 

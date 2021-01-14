@@ -45,7 +45,7 @@ simAdjMat <- function(netComs, D = NULL, b = 3) {
     
     # Get community connectivities
     coms <- netComs$coms
-    conns <- sapply(levels(coms), getComConn, adjMat, coms)
+    conns <- getComConn(levels(coms), adjMat, coms)
     
     # Get background connectivity
     bg <- getComConn("bg", adjMat, coms)

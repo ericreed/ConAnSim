@@ -151,6 +151,10 @@ names(modList) <- levels(netConn$coms)
 
 Pres <- conanWrapperPval(eSet, modList, nIter, nCores, seed)
 
+## Add some relavant information
+Pres$conn1 <- Pres$conn0 <- netConn$conns
+Pres$bg1 <- Pres$bg0 <- netConn$bg
+
 ## Print top of data frame
 print(head(Pres))
 
@@ -159,33 +163,38 @@ print(Pres[Pres$mod == "1",])
 
 ```
 
-## Change background connectivity in one group and recalculate p-values
+## Change background connectivity in one group
 
 ```{r}
 
-## Set modular connectivity in the correlation matrix from group 1 to NA
-cor1comRem <- cor1
-for(i in levels(netConn$coms)) cor1comRem[netConn$coms == i, netConn$coms == i] <- NA
+## Set modular connectivity in the correlation matrix for one group to NA
+corComRem <- cor1 # or cor0
+for(i in levels(netConn$coms)) corComRem[netConn$coms == i, netConn$coms == i] <- NA
 
 ## Get shrink factor to reduce background connectivity to a value of 0.3
-shrVal <- findShrinkFactor(0.3, cor1comRem)
+shrVal <- findShrinkFactor(0.3, corComRem)
 
-## Shrink correlaton matrix for group 1
-cor1_bgRed <- tanh(atanh(cor1) * shrVal)
-
-## Print new connectivity values
+## Shrink correlaton matrix for one group
+cor_bgRed <- shrinkCor(cor1, shrVal) # or com0
 
 ### Community
-sapply(levels(netConn$coms), getComConn, cor1_bgRed, netConn$coms)
+getComConn(levels(netConn$coms), cor_bgRed, netConn$coms)
 
-### Community
-getComConn("bg", cor1_bgRed, netConn$coms)
+### Background
+getComConn("bg", cor_bgRed, netConn$coms)
 
 ## Simulate data using this new matrix
-eSetBG <- eSetSim(n0, n1, cor0, cor1_bgRed)
+eSetBG <- eSetSim(n0, n1, cor0, cor_bgRed)
 
 ## Calculate p-values
 PresBG <- conanWrapperPval(eSetBG, modList, nIter, nCores, seed)
+
+## Print new connectivity values
+
+## Add some relavant information
+PresBG$conn1 <- PresBG$conn0 <- netConn$conns
+PresBG$bg0 <- netConn$bg
+PresBG$bg1 <- getComConn("bg", cor_bgRed, netConn$coms)
 
 ## Print top of data frame
 print(head(PresBG))
@@ -195,7 +204,7 @@ print(PresBG[PresBG$mod == "1",])
 
 ```
 
-## Change connectivity of each module in one group and recalculate p-values
+## Change connectivity of each module in one group
 
 ```{r}
 
@@ -204,19 +213,19 @@ targets <- netConn$conns - 0.1
 
 ## Get shrinking factors for each module
 shrVec <- sapply(levels(netConn$coms), function(x) {
-    cor1Modx <- cor1[netConn$coms == x, netConn$coms == x]
-    findShrinkFactor(targets[x], cor1Modx)
+    corModx <- cor1[netConn$coms == x, netConn$coms == x]
+    findShrinkFactor(targets[x], corModx)
 })
 
 ## Shrink each module
-cor1_modRed <- cor1
+cor_modRed <- cor1 # or com0
 for(i in levels(netConn$coms)) {
     
-    cor1_modRed[netConn$coms == i, netConn$coms == i] <- tanh(atanh(cor1[netConn$coms == i, netConn$coms == i]) * shrVec[i])
+    cor_modRed[netConn$coms == i, netConn$coms == i] <- shrinkCor(cor1[netConn$coms == i, netConn$coms == i], shrVec[i])
     
     # This doesn't always work.
-    if(!is.positive.definite(cor1_modRed)) {
-      cor1_modRed[netConn$coms == i, netConn$coms == i] <- cor1[netConn$coms == i, netConn$coms == i]
+    if(!is.positive.definite(cor_modRed)) {
+      cor_modRed[netConn$coms == i, netConn$coms == i] <- cor1[netConn$coms == i, netConn$coms == i]
     }
     
 }
@@ -224,16 +233,24 @@ for(i in levels(netConn$coms)) {
 ## Print new connectivity values
 
 ### Community
-sapply(levels(netConn$coms), getComConn, cor1_modRed, netConn$coms)
+getComConn(levels(netConn$coms), cor_modRed, netConn$coms)
 
 ### Community
-getComConn("bg", cor1_modRed, netConn$coms)
+getComConn("bg", cor_modRed, netConn$coms)
 
 ## Simulate data using this new matrix
-eSetDiffConn <- eSetSim(n0, n1, cor0, cor1_modRed)
+eSetDiffConn <- eSetSim(n0, n1, cor0, cor_modRed)
 
 ## Calculate p-values
 PresDiffConn <- conanWrapperPval(eSetDiffConn, modList, nIter, nCores, seed)
+
+## Add some relavant information
+PresDiffConn$conn0 <- netConn$conns
+PresDiffConn$conn1 <- getComConn(levels(netConn$coms), cor_modRed, netConn$coms)
+PresDiffConn$bg1 <- PresDiffConn$bg0 <- netConn$bg
+
+## Remove instances where the connectivity could not be reduced
+PresDiffConn <- PresDiffConn[PresDiffConn$conn0 != PresDiffConn$conn1,]
 
 ## Print top of data frame
 print(head(PresDiffConn))
@@ -241,6 +258,116 @@ print(head(PresDiffConn))
 ## Print p-values for module 1
 print(PresDiffConn[PresDiffConn$mod == "1",])
 
+```
+
+## Combining differential connectivity and background connectivity
+
+### Situation 1: Smaller background connectivity in group with greater modular connectivity
+
+We already have everything we need:
+
+1. A correlation matrix with reduced background connectivity, *cor_bgRed*.
+2. A correlation matrix with reduced modular connectivity, *cor_modRed*.
+
+```{r}
+
+## Simulate data using this new matrix
+eSetBG0_MR1 <- eSetSim(n0, n1, cor_bgRed, cor_modRed)
+
+## Calculate p-values
+PresBG0_MR1 <- conanWrapperPval(eSetBG0_MR1, modList, nIter, nCores, seed)
+
+## Add some relavant information
+PresBG0_MR1$conn0 <- netConn$conns
+PresBG0_MR1$conn1 <- getComConn(levels(netConn$coms), cor_modRed, netConn$coms)
+PresBG0_MR1$bg0 <- getComConn("bg", cor_bgRed, netConn$coms)
+PresBG0_MR1$bg1 <- netConn$bg
+
+## Remove instances where the connectivity could not be reduced
+PresBG0_MR1 <- PresBG0_MR1[PresBG0_MR1$conn0 != PresBG0_MR1$conn1,]
+
+## Print top of data frame
+print(head(PresBG0_MR1))
+
+## Print p-values for module 1
+print(PresBG0_MR1[PresBG0_MR1$mod == "1",])
 
 ```
+
+### Situation 2: Smaller background connectivity in group with smaller modular connectivity
+
+Here, we'll just need to reduce background connectivity in the group with reduced modular connectivity.
+
+```{r}
+
+## Shrink correlaton matrix for group
+cor_modRed_bgRed <- shrinkCor(cor_modRed, shrVal)
+
+## Simulate data using this new matrix
+eSetBG1_MR1 <- eSetSim(n0, n1, cor0, cor_modRed_bgRed)
+
+## Calculate p-values
+PresBG1_MR1 <- conanWrapperPval(eSetBG1_MR1, modList, nIter, nCores, seed)
+
+## Add some relavant information
+PresBG1_MR1$conn0 <- netConn$conns
+PresBG1_MR1$conn1 <- getComConn(levels(netConn$coms), cor_modRed, netConn$coms)
+PresBG1_MR1$bg0 <- netConn$bg
+PresBG1_MR1$bg1 <- getComConn("bg", cor_modRed_bgRed, netConn$coms)
+
+## Remove instances where the connectivity could not be reduced
+PresBG1_MR1 <- PresBG1_MR1[PresBG1_MR1$conn0 != PresBG1_MR1$conn1,]
+
+## Print top of data frame
+print(head(PresBG1_MR1))
+
+## Print p-values for module 1
+print(PresBG1_MR1[PresBG1_MR1$mod == "1",])
+
+```
+
+
+# Combine results into a single data frame
+
+```{r}
+
+simRes <- rbind(Pres, PresDiffConn, PresBG, PresBG0_MR1, PresBG1_MR1)
+
+## You can use the seed as simulation ID
+simRes$id <- seed
+
+## Check size of output
+print(dim(simRes))
+
+```
+
+## Which simulation parameters did we test
+
+```{r}
+
+## Subset for one set of ConAn parameters
+simResBFF <- simRes[simRes$sim_type == "bootstrap" & 
+                      simRes$mean_correct == FALSE &
+                      simRes$mdc_type == "fraction",]
+
+## Add rounded module connectivity
+simResBFF$conn05 <- round(netConn$conns[as.character(simResBFF$mod)]/0.05) * 0.05
+
+## Add rounded background connectivity
+simResBFF$bg05 <- round(netConn$bg/0.05) * 0.05
+
+## Add rounded differential modular connectivity 
+simResBFF$diff05 <- round((simResBFF$conn0 - simResBFF$conn1)/0.05) * 0.05
+
+## Add rounded differential background connectivity 
+simResBFF$diffbg05 <- round((simResBFF$bg0 - simResBFF$bg1)/0.05) * 0.05
+
+## Get fequency table
+Ftab <- as.data.frame(table(simResBFF$conn05, simResBFF$bg05, simResBFF$diff05, simResBFF$diffbg05))
+colnames(Ftab) <- c("conn", "bg", "diff", "diffbg", "count")
+Ftab <- Ftab[Ftab$count != 0,]
+
+print(Ftab)
+```
+
 

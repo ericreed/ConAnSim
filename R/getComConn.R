@@ -1,7 +1,7 @@
 # Function to get connectivity for a given community from an adjacency matrix
 
 ## Arguments
-### x = The community identifier or "bg" to calculate background connectivity
+### x = A single value or vector community identifiers or "bg" to calculate background connectivity
 ### adjMat = Adjacency matrix (p x p)
 ### coms = A vector of length p of community members
 
@@ -10,15 +10,22 @@
 
 getComConn <- function(x, adjMat, coms) {
     
-    if(x == "bg") {
+    if(length(x) == 1 && x == "bg") {
         adjSub <- adjMat
         for(i in levels(coms)) adjSub[coms == i, coms == i] <- NA
+        getConn(adjSub)
     } else {
-        adjSub <- adjMat[coms == x, coms == x]
+        sapply(x, function(y, adjMat) {
+            getConn(adjMat[coms == y, coms == y])
+        }, adjMat)
     }
+}
+
+getConn <- function(adjSub) {
     
     adjSub %>%
         .[upper.tri(.)] %>%
         `^`(2) %>%
         mean(., na.rm = TRUE)
+    
 }
