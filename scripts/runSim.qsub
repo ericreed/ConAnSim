@@ -1,0 +1,14 @@
+#!/bin/bash
+#$ -S /bin/bash
+#$ -N runConAnSims
+#$ -cwd
+#$ -j Y
+#$ -V
+#$ -m be
+#$ -M YOUREMAIL
+#$ -l h_rt=300:00:00
+
+module purge
+module load python3
+module load R/3.6.0
+R CMD BATCH --no-save --no-restore 01_runConAnSims.R 01_runConAnSims1.Rout
