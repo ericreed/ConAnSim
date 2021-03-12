@@ -9,8 +9,8 @@ mu <- 0.07
 Dval <- NULL
 
 # Minimum background connectivies
-minBG <- 0.04
-minConn <- 0.20
+minBG <- 0.03
+minConn <- 0.50
 
 # Number of samples per group
 n0 <- 50

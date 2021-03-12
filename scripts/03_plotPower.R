@@ -73,6 +73,10 @@ maPars$yDiff <- apply(maPars[, c("lowerDiff", "upperDiff")], 1, function(x) x[wh
 ## Subset for differences in background connectivity <= 10
 maParsBG10 <- maPars[abs(maPars$diffbgInput) <= 0.1,]
 
+## Get min and max difference connectivity
+minDiff <- min(maParsBG10$yDiff)
+maxDiff <- max(maParsBG10$yDiff)
+
 invisible(lapply(c(TRUE, FALSE), function(bg) {
     
     # Subset for bgDiff = 0 and no mean correct
@@ -106,7 +110,7 @@ invisible(lapply(c(TRUE, FALSE), function(bg) {
         scale_x_continuous(name = "Connectivity") +
         
         # Plot dimensions
-        coord_cartesian(ylim = c(-0.25, 0.25), xlim = c(0, 0.6), expand = TRUE) +
+        coord_cartesian(ylim = c(minDiff, maxDiff), xlim = c(0, 0.8), expand = TRUE) +
             
         guides(color = guide_legend(override.aes = list(size=4))) +
         

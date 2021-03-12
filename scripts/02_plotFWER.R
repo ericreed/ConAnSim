@@ -22,7 +22,7 @@ simResDirs <- list.files(resDir, pattern = "sim_results_", full.names = TRUE)
 simResFiles <- file.path(simResDirs, "simResults.rds")
 
 ## Files to write out
-FDRout <- file.path(plotDir, "FDR_ConAn.png")
+FDRout <- file.path(plotDir, "FWER_ConAn.png")
 
 ## Read in results file
 res <- do.call(rbind, lapply(simResFiles, function(file) readRDS(file)))
@@ -67,7 +67,7 @@ trans_y <- scales::trans_new(name = "trans_y",
 maParsBG10 <- maPars[abs(maPars$diffbgInput) <= 0.1,]
 
 # Plot
-png(FDRout, height = 1000, width = 1100)
+png(FDRout, height = 1000, width = 1300)
 ggplot(maParsBG10, aes(x = lower, y = dr, group = mean_correct, color = mean_correct)) +
     
     # Target DR
@@ -78,8 +78,9 @@ ggplot(maParsBG10, aes(x = lower, y = dr, group = mean_correct, color = mean_cor
     geom_line(size = 1.3) +
     
     # CIs
-    geom_line(aes(x = lower, y = uCI), alpha = 0.6, size = 1.3, linetype = "F1") +
-    geom_line(aes(x = lower, y = lCI), alpha = 0.6, size = 1.3, linetype = "F1") +
+    geom_segment(aes(x = lower, xend = lower, y = lCI, yend = uCI), size = 1.7, alpha = 0.3) +
+    geom_line(aes(x = lower, y = uCI), alpha = 0.2, size = 1) +
+    geom_line(aes(x = lower, y = lCI), alpha = 0.2, size = 1) +
     
     # Create grid
     facet_grid(as.factor(diffbgInput) ~ sim_type + mdc_type) +
@@ -89,10 +90,10 @@ ggplot(maParsBG10, aes(x = lower, y = dr, group = mean_correct, color = mean_cor
     
     # Axis scales
     scale_y_continuous(name = "Family-wise Error Rate", trans = trans_y, breaks = c(0, 0.05, 0.25, 0.5, 0.75, 1)) +
-    scale_x_continuous(name = "Connectivity", breaks = c(0, 0.1, 0.2, 0.3, 0.4, 0.5)) +
+    scale_x_continuous(name = "Connectivity", breaks = c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7)) +
     
     # Plot dimensions
-    coord_cartesian(ylim = c(0, 1), xlim = c(0, 0.55), expand = TRUE) +
+    coord_cartesian(ylim = c(0, 1), xlim = c(0, 0.69), expand = TRUE) +
     
     # Theme
     theme_bw() +
